@@ -71,3 +71,7 @@ sin volcar la configuración completa de los contenedores.
 Esta prueba comprueba PostgreSQL y el volumen; no confirma persistencia del backend.
 No ejecuta eliminación de volúmenes ni necesita dumps. Si no puedes realizarla,
 registra persistencia como no verificada, aunque la definición de Compose sea correcta.
+
+## Ejecuciones registradas
+
+- [INFRA-000-V1: validación real del entorno local](../../docs/validation-INFRA-000-V1.md).
