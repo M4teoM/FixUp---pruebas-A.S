@@ -1,0 +1,34 @@
+# Superposición para las pruebas de desempeño. Se usa junto a compose.local.yml:
+#   docker compose --env-file .env -f compose.local.yml -f compose.perf.yml up -d database jwks backend
+#
+# Cambia solo lo necesario para medir sin depender de servicios externos:
+#   - jwks: emisor de llaves local; el backend valida tokens RS256 reales contra él en vez de Auth0.
+#   - backend: se construye desde el .jar ya compilado (perf/backend) y apaga lo que en el perfil
+#     dev depende de MinIO (creación del bucket y barrido de borrados), que no participa en los
+#     casos medidos.
+services:
+  jwks:
+    image: node:22-alpine
+    restart: unless-stopped
+    working_dir: /perf
+    command: ["node", "jwks-server.mjs"]
+    environment:
+      PORT: "8081"
+      JWKS_PATH: /work/jwks.json
+    volumes:
+      - ./perf/jwks-server.mjs:/perf/jwks-server.mjs:ro
+      - ./perf/.work/jwks.json:/work/jwks.json:ro
+    ports:
+      - "127.0.0.1:8081:8081"
+
+  backend:
+    build:
+      context: ./perf/backend
+      dockerfile: Dockerfile
+    image: fixup-backend:perf
+    environment:
+      FIXUP_STORAGE_AUTO_CREATE_BUCKET: "false"
+      FIXUP_MEDIA_DELETION_ENABLED: "false"
+    depends_on:
+      jwks:
+        condition: service_started

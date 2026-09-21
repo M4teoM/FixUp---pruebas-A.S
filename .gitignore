@@ -33,3 +33,5 @@ build/
 *serviceAccount*.json
 id_rsa*
 id_ed25519*
+perf/.work/
+perf/backend/app.jar

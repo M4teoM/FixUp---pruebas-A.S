@@ -1,0 +1,152 @@
+name: Performance
+
+# Pruebas de desempeño y disponibilidad de FR-UC-18, FR-UC-20 y FR-UC-21 sobre el stack real:
+# PostgreSQL 17 con RLS, el backend en contenedor y tokens RS256 validados de verdad.
+on:
+  workflow_dispatch:
+    inputs:
+      backend_ref:
+        description: Rama o commit del backend a medir
+        default: develop
+      scale:
+        description: Volumen de datos sembrados (small | full)
+        default: full
+      rate_factor:
+        description: Multiplicador de las tasas de carga (1 = tasas nominales)
+        default: "1"
+  push:
+    branches: ["test/performance-**"]
+    paths: ["perf/**", "compose.perf.yml", ".github/workflows/performance.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Carga y disponibilidad (backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BACKEND_REF: ${{ inputs.backend_ref || 'develop' }}
+      PERF_SCALE: ${{ inputs.scale || 'full' }}
+      RATE_FACTOR: ${{ inputs.rate_factor || '1' }}
+      K6_VERSION: v1.3.0
+    steps:
+      - name: Checkout pruebas
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: fixup-pruebas
+          persist-credentials: false
+
+      - name: Checkout backend
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: Seb-233/fixup-backend
+          ref: ${{ env.BACKEND_REF }}
+          path: fixup-backend
+          persist-credentials: false
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: fixup-backend/pom.xml
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Compilar el backend
+        working-directory: fixup-backend
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress -DskipTests package
+          cp target/fixup-backend-0.0.1-SNAPSHOT.jar ../fixup-pruebas/perf/backend/app.jar
+          echo "BACKEND_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Instalar k6
+        run: |
+          curl -sSL "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" | tar xz
+          sudo mv "k6-${K6_VERSION}-linux-amd64/k6" /usr/local/bin/k6
+          k6 version
+
+      - name: Correr las pruebas
+        working-directory: fixup-pruebas
+        run: |
+          export RUNNER_INFO="GitHub Actions ubuntu-latest, $(nproc) vCPU, $(free -g | awk '/Mem:/ {print $2}') GiB RAM"
+          chmod +x perf/run.sh
+          perf/run.sh
+
+      - name: Publicar el informe
+        if: always()
+        working-directory: fixup-pruebas
+        run: |
+          if [ -f perf/.work/report.md ]; then
+            cat perf/.work/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No se generó informe." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Guardar resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          # Nunca la llave privada de las pruebas.
+          path: |
+            fixup-pruebas/perf/.work/*.json
+            fixup-pruebas/perf/.work/*.jsonl
+            fixup-pruebas/perf/.work/*.md
+            fixup-pruebas/perf/.work/backend.log
+            !fixup-pruebas/perf/.work/fixtures.json
+          if-no-files-found: warn
+
+      - name: Apagar el stack
+        if: always()
+        working-directory: fixup-pruebas
+        run: docker compose --env-file .env -f compose.local.yml -f compose.perf.yml down -v || true
+
+  frontend:
+    name: Peso de las pantallas (frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout frontend
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: Seb-233/fixup-frontend
+          ref: develop
+          path: fixup-frontend
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: fixup-frontend/package-lock.json
+
+      - name: Build de producción
+        working-directory: fixup-frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npx ng build --configuration production 2>&1 | tee build.txt
+
+      - name: Resumen de bundles
+        working-directory: fixup-frontend
+        run: |
+          {
+            echo "## Frontend — build de producción"
+            echo
+            echo "Carga inicial y las pantallas perezosas de FR-UC-18, FR-UC-20 y FR-UC-21 (login y callback)."
+            echo
+            echo '```'
+            grep -E "Initial total|login|callback|request|quotation|earnings|my-jobs" build.txt | sed 's/\x1b\[[0-9;]*m//g'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
