@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+!.env.distributed.example
+!.env.vm.example
 
 *.log
 logs/
@@ -33,3 +35,7 @@ build/
 *serviceAccount*.json
 id_rsa*
 id_ed25519*
+
+# Despliegue distribuido
+.env.distributed
+evidencia/
