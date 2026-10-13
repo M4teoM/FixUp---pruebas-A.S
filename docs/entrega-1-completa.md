@@ -38,6 +38,10 @@ cuentas protagonistas sin Auth0.
 Cuentas de demostración: Carolina Restrepo (propietaria), Andrés Moreno (arrendatario), Jhon Fredy
 Cárdenas (técnico verificado), Inmobiliaria Cordillera y Soporte Fix&Rent (administración).
 
+Los indicadores de mercado necesitan una fuente: la sintética de desarrollo solo existe con el
+perfil `dev` (decisión del equipo), así que con el perfil demo la pantalla avisa que la fuente no
+respondió. En la VM, que corre con `dev`, sí muestran datos marcados como sintéticos.
+
 ## En la VM de la universidad (API y datos) con la PWA en el Mac
 
 Requiere estar en la red o la VPN de la universidad y el `.env.vm` del despliegue anterior
