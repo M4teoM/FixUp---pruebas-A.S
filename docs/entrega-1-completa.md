@@ -45,7 +45,7 @@ respondió. En la VM, que corre con `dev`, sí muestran datos marcados como sint
 ## En la VM de la universidad (API y datos) con la PWA en el Mac
 
 Requiere estar en la red o la VPN de la universidad y el `.env.vm` del despliegue anterior
-(plantilla en `.env.vm.example`).
+(plantilla en `config/vm.env.example`).
 
 ```bash
 ./scripts/desplegar-entrega1-vm.sh 10.43.99.147

@@ -31,7 +31,7 @@ backup_dir="${BACKUP_DIR:-$repo_root/../../backups}"
 say() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 die() { printf '\n\033[31mERROR: %s\033[0m\n' "$1" >&2; exit 1; }
 
-[[ -f "$env_file" ]] || die "Falta $env_file (copia .env.vm.example y complétalo)."
+[[ -f "$env_file" ]] || die "Falta $env_file (copia config/vm.env.example a .env.vm y complétalo)."
 
 start_args=(); solo_preparar=0
 for arg in "$@"; do

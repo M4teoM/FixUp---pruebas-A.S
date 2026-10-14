@@ -31,7 +31,7 @@ die() { printf '\n\033[31mERROR: %s\033[0m\n' "$1" >&2; exit 1; }
 simulado=0
 [[ "${1:-}" == "--simulado" ]] && simulado=1
 
-[[ -f "$env_file" ]] || die "Falta $env_file. Ejecuta: cp .env.distributed.example $env_file y edita las IP."
+[[ -f "$env_file" ]] || die "Falta $env_file. Ejecuta: cp config/distributed.env.example $env_file y edita las IP."
 set -a; # shellcheck disable=SC1090
 source "$env_file"; set +a
 

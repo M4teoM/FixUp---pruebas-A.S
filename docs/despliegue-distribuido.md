@@ -39,7 +39,7 @@ ssh estudiante@192.168.1.10 docker info     # debe responder sin pedir contrasen
 **En la maquina B:**
 
 ```bash
-cp .env.distributed.example .env.distributed
+cp config/distributed.env.example .env.distributed
 # editar DATA_HOST, DATA_SSH y APP_HOST con las IP reales de la red donde se sustenta
 ```
 
