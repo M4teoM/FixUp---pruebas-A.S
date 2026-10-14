@@ -19,6 +19,8 @@ services:
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
       AUTH0_ISSUER_URI: ${AUTH0_ISSUER_URI}
       AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+      # El backend valida los tokens con las llaves publicas del emisor; por defecto, las de Auth0.
+      AUTH0_JWK_SET_URI: ${AUTH0_JWK_SET_URI:-${AUTH0_ISSUER_URI}.well-known/jwks.json}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
       # Almacen de objetos en el nodo de datos. ENDPOINT lo usa el backend; PUBLIC_ENDPOINT es el
       # que escribe en las URLs firmadas y, por tanto, el que debe alcanzar el navegador.

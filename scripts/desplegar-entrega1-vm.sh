@@ -46,7 +46,13 @@ source "$env_file"; set +a
 : "${VM_IP:?}"; : "${VM_USER:?}"; : "${POSTGRES_USER:?}"
 vm_ssh="${VM_USER}@${VM_IP}"
 on_vm() { ssh -o BatchMode=yes -o ConnectTimeout=10 "$vm_ssh" "$@"; }
-sql() { on_vm docker exec -i "$db_container" psql -U "$POSTGRES_USER" -v ON_ERROR_STOP=1 -At "$@"; }
+# sql <base> <consulta> [separador]: la consulta viaja por stdin porque ssh vuelve a partir los
+# argumentos en la VM; los que sí van en la línea de comandos se citan con printf %q.
+sql() {
+  local db="$1" query="$2" sep="${3:-|}"
+  printf '%s\n' "$query" | on_vm "docker exec -i $db_container psql -U $(printf %q "$POSTGRES_USER") \
+    -v ON_ERROR_STOP=1 -At -F $(printf %q "$sep") -d $(printf %q "$db")"
+}
 
 # Los valores van entre comillas simples: .env.vm se carga con "source" y un subject de Auth0
 # ("auth0|abc") sin comillas se leería como una tubería. Docker Compose también acepta comillas.
@@ -73,7 +79,7 @@ fi
 say "2/5 Respaldando la base anterior ($old_db)"
 mkdir -p "$backup_dir"
 backup="$backup_dir/vm-${old_db}-$(date +%Y%m%d-%H%M%S).dump"
-if [[ "$(sql -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$old_db'")" == 1 ]]; then
+if [[ "$(sql postgres "SELECT 1 FROM pg_database WHERE datname = '$old_db'")" == 1 ]]; then
   on_vm docker exec "$db_container" pg_dump -U "$POSTGRES_USER" -d "$old_db" -Fc >"$backup"
   [[ -s "$backup" ]] || die "El respaldo quedó vacío: $backup"
   echo "Respaldo: $backup ($(du -h "$backup" | cut -f1))"
@@ -82,17 +88,17 @@ else
 fi
 
 say "3/5 Base nueva $new_db"
-if [[ "$(sql -d postgres -c "SELECT 1 FROM pg_database WHERE datname = '$new_db'")" == 1 ]]; then
+if [[ "$(sql postgres "SELECT 1 FROM pg_database WHERE datname = '$new_db'")" == 1 ]]; then
   echo "La base $new_db ya existe: se conserva (los datos de demostración no se cargan dos veces)."
 else
-  sql -d postgres -c "CREATE DATABASE $new_db OWNER $POSTGRES_USER" >/dev/null
+  sql postgres "CREATE DATABASE $new_db OWNER $POSTGRES_USER" >/dev/null
   echo "Base $new_db creada."
 fi
 
 say "4/5 Cuentas protagonistas de la demostración"
 # Una fila por usuario real de Auth0 de la base anterior: subject;roles;verificación;cotizaciones;nombre
 # (los subjects de Auth0 llevan "|", por eso el separador es ";").
-candidates="$(sql -d "$old_db" -F ';' -c "
+candidates="$(sql "$old_db" "
   SELECT u.auth0_subject,
          string_agg(DISTINCT r.role, ',' ORDER BY r.role),
          coalesce(max(f.verification_status), ''),
@@ -102,7 +108,7 @@ candidates="$(sql -d "$old_db" -F ';' -c "
     JOIN user_roles r ON r.user_id = u.id
     LEFT JOIN fixer_profiles f ON f.user_id = u.id
    WHERE u.status = 'ACTIVE' AND u.auth0_subject NOT LIKE 'seed|%' AND u.auth0_subject NOT LIKE 'auth0|demo-%'
-   GROUP BY u.id, u.auth0_subject, u.display_name" 2>/dev/null || true)"
+   GROUP BY u.id, u.auth0_subject, u.display_name" ';' 2>/dev/null || true)"
 [[ -n "$candidates" ]] || echo "No se pudieron leer usuarios de la base anterior; se usarán los subjects de $env_file."
 
 chosen=""
@@ -155,15 +161,15 @@ say "5/5 Desplegando con start-vm.sh"
 
 echo
 echo "--- Datos de demostración en $new_db:"
-sql -d "$new_db" -F ' ' -c "
+sql "$new_db" "
   SELECT 'usuarios', count(*) FROM users UNION ALL
   SELECT 'inmuebles', count(*) FROM properties UNION ALL
   SELECT 'solicitudes', count(*) FROM repair_requests UNION ALL
   SELECT 'cotizaciones', count(*) FROM quotations UNION ALL
-  SELECT 'visitas', count(*) FROM technical_visits"
+  SELECT 'visitas', count(*) FROM technical_visits" ' '
 echo "--- Cuentas protagonistas ligadas a Auth0:"
-sql -d "$new_db" -F ' | ' -c "
+sql "$new_db" "
   SELECT u.display_name, string_agg(r.role, ',' ORDER BY r.role)
     FROM users u JOIN user_roles r ON r.user_id = u.id
    WHERE u.auth0_subject IN ('$owner', '$tenant', '$fixer', '$manager', '$admin')
-   GROUP BY u.display_name"
+   GROUP BY u.display_name" ' | '
