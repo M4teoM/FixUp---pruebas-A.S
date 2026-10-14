@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "fixup",
+      "credentials": [
+        { "accessKey": "fixup", "secretKey": "development-only-secret" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

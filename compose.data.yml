@@ -1,0 +1,58 @@
+# Maquina A — nodo de datos.
+#
+# Se inicia SIEMPRE desde la maquina B con un contexto remoto de Docker sobre SSH:
+#   docker --context fixup-data compose -f compose.data.yml up -d
+# El script scripts/start-distributed.sh lo hace por ti; este archivo no se ejecuta a mano.
+#
+# Diferencia con compose.local.yml: aqui el puerto se publica en ${POSTGRES_BIND} (0.0.0.0 por
+# defecto) y no en 127.0.0.1, porque el backend vive en otra maquina de la red.
+name: ${COMPOSE_PROJECT_NAME:-fixup-dist}-data
+
+services:
+  database:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "${POSTGRES_BIND:-0.0.0.0}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # Almacenamiento de objetos S3 (fotos de solicitudes, documentos de verificacion, portafolio).
+  # Vive en el nodo de datos, junto a PostgreSQL. SeaweedFS reemplaza a MinIO, cuya imagen fue
+  # retirada de Docker Hub. El backend lo alcanza por ${DB_HOST}:9000 y el navegador sube directo
+  # con URLs firmadas contra STORAGE_PUBLIC_ENDPOINT. Credenciales: config/seaweedfs-s3.json.
+  storage:
+    image: ${STORAGE_IMAGE:-chrislusf/seaweedfs:latest}
+    restart: unless-stopped
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "${POSTGRES_BIND:-0.0.0.0}:${STORAGE_PORT:-9000}:8333"
+    volumes:
+      - storage-data:/data
+    configs:
+      - source: seaweedfs-s3
+        target: /etc/seaweedfs/s3.json
+
+configs:
+  # Compose copia el contenido al contenedor por la API de Docker: funciona tambien con un
+  # contexto remoto (maquina A por SSH), donde una ruta montada no existiria.
+  seaweedfs-s3:
+    file: ./config/seaweedfs-s3.json
+
+volumes:
+  storage-data:
+    name: ${COMPOSE_PROJECT_NAME:-fixup-dist}-storage-data
+  postgres-data:
+    name: ${COMPOSE_PROJECT_NAME:-fixup-dist}-postgres-data
