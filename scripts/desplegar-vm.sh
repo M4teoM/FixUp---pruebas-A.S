@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Despliega la entrega 1 completa en la VM de la universidad.
+# Despliega la rama actual en la VM de la universidad sobre una base nueva.
 #
-#   ./scripts/desplegar-entrega1-vm.sh [IP-de-la-VM] [--tunel] [--solo-preparar]
+#   ./scripts/desplegar-vm.sh [IP-de-la-VM] [--tunel] [--solo-preparar]
 #
-# 1. Respalda la base anterior (fixup) en ../../backups con pg_dump.
-# 2. Crea la base fixup_entrega1 si no existe: las migraciones nuevas no se mezclan
+# NEW_DB (por defecto fixup_develop) es la base que se crea; OLD_DB (por defecto
+# fixup_entrega1) es la anterior, que se respalda y queda intacta. La entrega 1 se
+# desplegó con NEW_DB=fixup_entrega1 OLD_DB=fixup.
+#
+# 1. Respalda la base anterior en ../../backups con pg_dump.
+# 2. Crea la base nueva si no existe: las migraciones nuevas no se mezclan
 #    con las de la base anterior, que queda intacta para volver atrás.
 # 3. Liga las cuentas protagonistas de los datos de demostración a los usuarios
 #    reales de Auth0 que ya existen en la base anterior (propietario, arrendatario,
@@ -16,15 +20,15 @@
 # 5. Comprueba en la base nueva que los datos y las cuentas quedaron cargados.
 #
 # --solo-preparar hace los pasos 1 a 4 sin arrancar nada (para revisar el .env.vm).
-# Para volver a la base anterior: POSTGRES_DB=fixup en .env.vm y ./scripts/start-vm.sh.
+# Para volver a la base anterior: POSTGRES_DB=<OLD_DB> en .env.vm y ./scripts/start-vm.sh.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd -- "$repo_root"
 env_file=".env.vm"
-old_db="${OLD_DB:-fixup}"
-new_db="fixup_entrega1"
+old_db="${OLD_DB:-fixup_entrega1}"
+new_db="${NEW_DB:-fixup_develop}"
 db_container="fixup-dist-data-database-1"
 backup_dir="${BACKUP_DIR:-$repo_root/../../backups}"
 
@@ -166,7 +170,9 @@ sql "$new_db" "
   SELECT 'inmuebles', count(*) FROM properties UNION ALL
   SELECT 'solicitudes', count(*) FROM repair_requests UNION ALL
   SELECT 'cotizaciones', count(*) FROM quotations UNION ALL
-  SELECT 'visitas', count(*) FROM technical_visits" ' '
+  SELECT 'visitas', count(*) FROM technical_visits UNION ALL
+  SELECT 'pagos', count(*) FROM repair_payments UNION ALL
+  SELECT 'deudas', count(*) FROM owner_debts" ' '
 echo "--- Cuentas protagonistas ligadas a Auth0:"
 sql "$new_db" "
   SELECT u.display_name, string_agg(r.role, ',' ORDER BY r.role)

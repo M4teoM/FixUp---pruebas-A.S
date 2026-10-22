@@ -48,7 +48,7 @@ Requiere estar en la red o la VPN de la universidad y el `.env.vm` del despliegu
 (plantilla en `config/vm.env.example`).
 
 ```bash
-./scripts/desplegar-entrega1-vm.sh 10.43.99.147
+NEW_DB=fixup_entrega1 OLD_DB=fixup ./scripts/desplegar-vm.sh 10.43.99.147
 ```
 
 El script respalda la base anterior (`fixup`) en `../../backups`, crea `fixup_entrega1`, liga las
