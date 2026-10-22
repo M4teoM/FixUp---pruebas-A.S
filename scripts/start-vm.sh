@@ -98,6 +98,7 @@ for f in compose.app.yml compose.data.yml; do
   docker compose --env-file "$env_file" -f "$f" down >/dev/null 2>&1 || true
 done
 if [[ -S "$tunnel_socket" ]]; then ssh -S "$tunnel_socket" -O exit "$vm_ssh" >/dev/null 2>&1 || true; fi
+scripts/tunel-vm.sh stop >/dev/null
 
 # --- 3. PostgreSQL y almacen de fotos en la VM ---------------------------------
 say "3/6 Levantando PostgreSQL y el almacen de fotos en la VM"
@@ -146,18 +147,12 @@ done
 # --- 5. Camino de red Mac -> VM ----------------------------------------------------
 say "5/6 Comprobando que este Mac llega a la API de la VM"
 if [[ "$tunel" == 1 ]]; then
-  ssh -f -N -M -S "$tunnel_socket" -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
-    -L "${backend_port}:127.0.0.1:${backend_port}" \
-    -L "${storage_port}:127.0.0.1:${storage_port}" \
-    -L "${POSTGRES_PORT:-5432}:127.0.0.1:${POSTGRES_PORT:-5432}" "$vm_ssh" \
+  # Vigilado: si se cae la red o la VPN, el tunel se reabre solo cuando vuelve.
+  scripts/tunel-vm.sh start "$vm_ssh" "$backend_port" "$storage_port" "${POSTGRES_PORT:-5432}" \
     || die "No se pudo abrir el tunel SSH (hay algo usando 8080, 9000 o 5432 en este Mac?)."
-  echo "Tunel SSH abierto: localhost:${backend_port}/${storage_port}/${POSTGRES_PORT:-5432} -> VM $VM_IP"
 elif [[ "$storage_tunnel" == 1 ]]; then
-  ssh -f -N -M -S "$tunnel_socket" -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 \
-    -L "${storage_port}:127.0.0.1:${storage_port}" \
-    -L "${POSTGRES_PORT:-5432}:127.0.0.1:${POSTGRES_PORT:-5432}" "$vm_ssh" \
+  scripts/tunel-vm.sh start "$vm_ssh" "$storage_port" "${POSTGRES_PORT:-5432}" \
     || die "No se pudo abrir el tunel SSH de fotos (hay algo usando ${storage_port} o ${POSTGRES_PORT:-5432} en este Mac?)."
-  echo "Tunel SSH abierto: localhost:${storage_port} (fotos) y localhost:${POSTGRES_PORT:-5432} (base) -> VM $VM_IP"
 fi
 if [[ "$tunel" == 1 || "$storage_tunnel" == 1 ]]; then
   code_storage="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://localhost:${storage_port}/" || true)"

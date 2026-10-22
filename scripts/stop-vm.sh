@@ -18,4 +18,5 @@ docker --context fixup-vm compose --env-file "$env_file" -f compose.app.yml down
 VM_CONFIG_DIR="$(ssh -o BatchMode=yes "${VM_USER}@${VM_IP}" 'echo $HOME')/fixup-config"; export VM_CONFIG_DIR
 docker --context fixup-vm compose --env-file "$env_file" -f compose.data.yml -f compose.vm-data.yml down ${extra[@]+"${extra[@]}"} || true
 [[ -S "$tunnel_socket" ]] && { ssh -S "$tunnel_socket" -O exit "${VM_USER}@${VM_IP}" >/dev/null 2>&1 || true; }
+scripts/tunel-vm.sh stop || true
 echo "FixUp detenido en este Mac y en la VM ${VM_IP}."
