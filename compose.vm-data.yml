@@ -1,0 +1,8 @@
+# Ajuste de compose.data.yml cuando el nodo de datos es la VM (scripts/start-vm.sh).
+#
+# Compose monta "configs" como un bind del archivo, y con un contexto remoto esa ruta se busca
+# en la VM, no en este Mac. start-vm.sh copia config/seaweedfs-s3.json a ${VM_CONFIG_DIR} en
+# la VM y este archivo hace que el almacen lo lea de ahi.
+configs:
+  seaweedfs-s3:
+    file: ${VM_CONFIG_DIR:-/tmp/fixup-config}/seaweedfs-s3.json
