@@ -11,6 +11,7 @@
 //   PERF_WORK    carpeta con la llave (jwt.mjs init) y donde se escribe fixtures.json
 //   PERF_PSQL    comando que recibe SQL por stdin (psql contra la base del backend)
 //   PERF_SCALE   small | full   (volumen de datos)
+import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -33,13 +34,14 @@ const runId = Date.now().toString(36);
 const started = Date.now();
 let calls = 0;
 
-async function api(method, path, token, body, expected) {
+async function api(method, path, token, body, expected, extraHeaders = {}) {
   calls += 1;
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers: {
       authorization: `Bearer ${token}`,
-      ...(body === undefined ? {} : { 'content-type': 'application/json' })
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...extraHeaders
     },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
@@ -81,7 +83,7 @@ const REQUEST = {
 
 async function openRequest(owner) {
   const created = await api('POST', '/requests', owner.token,
-    { propertyId: owner.propertyId, ...REQUEST, mediaIds: [] }, [201]);
+    { propertyId: owner.propertyId, ...REQUEST, mediaIds: [], paymentMethod: 'TRANSFER' }, [201]);
   return created.requestId;
 }
 
@@ -110,8 +112,17 @@ INSERT INTO fixer_specialties (fixer_user_id, specialty)
 
 // ---------- 3. Una propiedad por propietario ----------
 await pool(owners, 8, async (owner, i) => {
-  const property = await api('POST', '/properties', owner.token,
-    { name: `Apto perf ${i}`, address: `Calle ${i} # 1-23`, city: 'Bogota', areaM2: 60 }, [201]);
+  // latitude y longitude son @NotNull desde FR-UC-02: sin ellas la creación responde 400
+  // INVALID_REQUEST. Se reparten alrededor del centro de Bogotá en vez de apilarse en un punto,
+  // para que estos inmuebles tampoco distorsionen una búsqueda por radio.
+  const property = await api('POST', '/properties', owner.token, {
+    name: `Apto perf ${i}`,
+    address: `Calle ${i} # 1-23`,
+    city: 'Bogota',
+    areaM2: 60,
+    latitude: Number((4.7110 + ((i % 7) - 3) * 0.012).toFixed(6)),
+    longitude: Number((-74.0721 + ((i % 5) - 2) * 0.012).toFixed(6)),
+  }, [201]);
   owner.propertyId = property.id;
 });
 
@@ -141,11 +152,18 @@ const raceRequests = await pool([...Array(VOLUME.raceRequests).keys()], 4, async
 });
 
 // ---------- 6. Historial de ingresos (FR-UC-20): trabajos cerrados y retenidos por técnico ----------
+// Desde FR-UC-22 aceptar una cotizacion no abre el trabajo: inicia un pago. El trabajo nace, y
+// con el el ingreso retenido, cuando un intento por la pasarela simulada queda aprobado. El intento
+// exige la referencia y el monto exactos del pago y una clave de idempotencia propia.
 async function assignedJob(fixer, fi, n) {
   const owner = owners[(fi + n) % owners.length];
   const requestId = await openRequest(owner);
   const quotationId = await quote(fixer, requestId, amountFor(n));
-  await api('POST', `/quotations/${quotationId}/accept`, owner.token, undefined, [200]);
+  const accepted = await api('POST', `/quotations/${quotationId}/accept`, owner.token, undefined, [200]);
+  const payment = await api('GET', `/payments/${accepted.paymentId}`, owner.token, undefined, [200]);
+  await api('POST', `/payments/${accepted.paymentId}/attempts`, owner.token,
+    { reference: payment.reference, amount: payment.amount, instrument: 'SANDBOX_CARD' }, [200],
+    { 'Idempotency-Key': randomUUID() });
   return { requestId, quotationId, amount: amountFor(n) };
 }
 
