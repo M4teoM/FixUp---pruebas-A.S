@@ -13,6 +13,7 @@
 import { createPrivateKey, generateKeyPairSync, randomUUID, sign } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 export const ISSUER = process.env.PERF_ISSUER ?? 'http://jwks:8081/';
 export const AUDIENCE = process.env.PERF_AUDIENCE ?? 'https://api.fixup.perf';
@@ -62,7 +63,10 @@ export function tamper(token) {
   return `${h}.${p}.${flipped}`;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// En Windows process.argv[1] es C:\...\jwt.mjs y import.meta.url es file:///C:/.../jwt.mjs,
+// así que compararlos a mano nunca coincide y el bloque no se ejecutaba: node salía con
+// código 0 sin escribir la llave. pathToFileURL hace la conversión bien en los tres sistemas.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [, , command, dir, subject] = process.argv;
   if (command === 'init' && dir) {
     initKeys(dir);

@@ -6,14 +6,15 @@ import { readFileSync } from 'node:fs';
 
 const port = Number(process.env.PORT ?? 8081);
 const jwksPath = process.env.JWKS_PATH ?? '/work/jwks.json';
-const body = readFileSync(jwksPath, 'utf8');
 let fetches = 0;
 
 createServer((req, res) => {
   if (req.url === '/.well-known/jwks.json') {
     fetches += 1;
+    // Se lee en cada petición, no una vez al arrancar: si la llave se regenera con el servidor
+    // en marcha, lo que se publica tiene que ser la llave de ahora. Es un archivo diminuto.
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'max-age=300' });
-    res.end(body);
+    res.end(readFileSync(jwksPath, 'utf8'));
   } else if (req.url === '/stats') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ jwksFetches: fetches }));

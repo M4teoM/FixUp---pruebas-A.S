@@ -29,6 +29,13 @@ services:
     environment:
       FIXUP_STORAGE_AUTO_CREATE_BUCKET: "false"
       FIXUP_MEDIA_DELETION_ENABLED: "false"
+      # El backend exige estas tres sin valor por defecto y se niega a arrancar sin ellas.
+      # Ninguna ruta medida sube ni descarga archivos, y firmar una URL es cálculo local, así que
+      # apuntan a un almacenamiento que no existe: si algo intentara usarlo, se nota en vez de
+      # pasar desapercibido.
+      FIXUP_STORAGE_ENDPOINT: "http://almacenamiento-no-usado:9000"
+      FIXUP_STORAGE_ACCESS_KEY: "perf-only"
+      FIXUP_STORAGE_SECRET_KEY: "perf-only"
     depends_on:
       jwks:
         condition: service_started
